@@ -9,7 +9,12 @@ import pathlib
 import sys
 from typing import Any
 
-from factory_runtime.lane_repository import (
+# Run directly (a kickoff Validator does), Python sees only harness/, not factory_runtime.
+_PACKAGE_ROOT = str(pathlib.Path(__file__).resolve().parent.parent)
+if _PACKAGE_ROOT not in sys.path:
+    sys.path.append(_PACKAGE_ROOT)
+
+from factory_runtime.lane_repository import (  # noqa: E402
     LaneExport,
     LaneRepositoryError,
     StandaloneRepository,
@@ -17,7 +22,7 @@ from factory_runtime.lane_repository import (
     read_freeze_excludes,
     validate_standalone_repository,
 )
-from factory_runtime.projection_limits import ProjectionLimitsError, retained_projection_limits
+from factory_runtime.projection_limits import ProjectionLimitsError, retained_projection_limits  # noqa: E402
 
 
 def _standalone_json(repository: StandaloneRepository) -> dict[str, Any]:

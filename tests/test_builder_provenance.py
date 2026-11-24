@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 
 import pytest
@@ -163,6 +164,35 @@ def test_pr_snapshot_must_match_exact_head_and_unique_standalone_attribution(bui
     for snapshot in wrong:
         report = run_record.check_builder(root, doc, repo, candidate, pr=snapshot)
         assert report["status"] == "mismatch" and report["findings"], snapshot
+
+
+def test_direct_provenance_cli_reads_pr_without_repo_on_pythonpath(builder_run, tmp_path):
+    runs, root, repo, _ = builder_run
+    candidate = commit(repo, "Task change\n\n" + TRAILERS)
+    url = "https://github.com/example/product/pull/7"
+    response = {"url": url, "body": f"{PR_LINE}\nFactoryRun: task\n", "headRefOid": candidate}
+    gh = tmp_path / "gh"
+    gh.write_text(
+        "#!/bin/sh\n"
+        'test -f .kindex-no-index && test "$1" = pr && test "$2" = view || exit 1\n'
+        "cat <<'JSON'\n" + json.dumps(response) + "\nJSON\n"
+    )
+    gh.chmod(0o755)
+    environment = dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ["PATH"],
+                       FACTORY_PYTHON=sys.executable)
+    # Load dependencies without processing editable-install paths from .pth files.
+    environment["PYTHONPATH"] = sysconfig.get_path("purelib")
+    checked = subprocess.run(
+        [sys.executable, "-S", str(ROOT / "harness/run_record.py"), "provenance",
+         "--runs", str(runs), "--run", "task", "--repo", str(repo),
+         "--commit", candidate, "--pr", url],
+        cwd=repo, env=environment, text=True, capture_output=True, timeout=15,
+    )
+    assert checked.returncode == 0, checked.stderr
+    report_path, = (root / "provenance").glob("*.json")
+    report = json.loads(report_path.read_text())
+    assert report["status"] == "consistent"
+    assert report["pr"] == response
 
 
 def test_validation_reports_missing_attribution_without_overriding_test_outcome(builder_run):

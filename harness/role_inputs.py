@@ -18,8 +18,13 @@ import sys
 import tempfile
 from pathlib import Path, PurePosixPath
 
-from factory_runtime.host_git import HostGitError, materialize_commit, run_host_git
-from factory_runtime.kindex_workspace import NO_INDEX_MARKER, mark_no_index
+# Run directly (a kickoff Validator does), Python sees only harness/, not factory_runtime.
+_PACKAGE_ROOT = str(Path(__file__).resolve().parent.parent)
+if _PACKAGE_ROOT not in sys.path:
+    sys.path.append(_PACKAGE_ROOT)
+
+from factory_runtime.host_git import HostGitError, materialize_commit, run_host_git  # noqa: E402
+from factory_runtime.kindex_workspace import NO_INDEX_MARKER, mark_no_index  # noqa: E402
 
 record = (importlib.import_module("harness.run_record") if __package__
           else importlib.import_module("run_record"))

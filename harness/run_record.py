@@ -25,6 +25,11 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Any, cast
 
+# Run directly (a kickoff Validator does), Python sees only harness/, not factory_runtime.
+_PACKAGE_ROOT = str(Path(__file__).resolve().parent.parent)
+if _PACKAGE_ROOT not in sys.path:
+    sys.path.append(_PACKAGE_ROOT)
+
 SCHEMA = "factory-harness/3"
 
 

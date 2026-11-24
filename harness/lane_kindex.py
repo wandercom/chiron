@@ -40,7 +40,12 @@ import subprocess
 import sys
 import threading
 
-from factory_runtime.kindex_workspace import mark_no_index
+# Run directly (a kickoff Validator does), Python sees only harness/, not factory_runtime.
+_PACKAGE_ROOT = str(pathlib.Path(__file__).resolve().parent.parent)
+if _PACKAGE_ROOT not in sys.path:
+    sys.path.append(_PACKAGE_ROOT)
+
+from factory_runtime.kindex_workspace import mark_no_index  # noqa: E402
 
 SCHEMA = "factory-lane-kindex/2"
 MINIMUM_KINDEX = (0, 48, 0)
