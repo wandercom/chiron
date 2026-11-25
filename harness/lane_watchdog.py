@@ -412,9 +412,11 @@ def _tmux(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 def process_snapshot() -> dict[int, dict[str, Any]] | None:
     """Read identities without command lines; failure is unknown, not an empty process table."""
+    # On macOS, the system ps has the privileges needed to read process CPU times.
+    ps = "/bin/ps" if sys.platform == "darwin" else "ps"
     try:
         result = subprocess.run(
-            ["ps", "-A", "-o", "pid=,ppid=,lstart=,stat=,time="], capture_output=True,
+            [ps, "-A", "-o", "pid=,ppid=,lstart=,stat=,time="], capture_output=True,
             text=True, check=True, timeout=10, env={**os.environ, "LC_ALL": "C", "TZ": "UTC"})
     except (OSError, subprocess.SubprocessError):
         return None
