@@ -12,6 +12,11 @@ public API is still pre-1.0.
 - `FACTORY_AGENT_BIN` lets an operator select provider entrypoints retained across
   coordinator starts and author-lane launches and resumes.
 
+### Fixed
+
+- On macOS, Factory retries process observation with the system `ps` when the `ps` on PATH
+  reports a missing entitlement for CPU time (TOOL-1306).
+
 ## [0.8.31] - 2026-11-18
 
 ### Changed

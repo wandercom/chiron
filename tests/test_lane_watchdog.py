@@ -5,17 +5,17 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 
-@pytest.mark.parametrize(("platform", "working_ps"), [("darwin", "/bin/ps"), ("linux", "ps")])
-def test_process_snapshot_selects_platform_ps(monkeypatch, platform, working_ps):
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_process_snapshot_keeps_a_working_path_ps(monkeypatch, platform):
     from harness import lane_watchdog
 
     def run(command, **kwargs):
-        if command[0] != working_ps:
-            raise subprocess.CalledProcessError(1, command, stderr="ps: time: requires entitlement")
+        assert command[0] == "ps"
         return subprocess.CompletedProcess(
             command, 0, "12 1 Wed Nov 25 17:00:00 2026 S 0:00.05\n", "",
         )
@@ -27,6 +27,42 @@ def test_process_snapshot_selects_platform_ps(monkeypatch, platform, working_ps)
         12: {"pid": 12, "ppid": 1, "started": "Wed Nov 25 17:00:00 2026", "state": "S",
              "cpu": "0:00.05"},
     }
+
+
+@pytest.mark.parametrize(("platform", "exit_code", "diagnostic", "retry"), [
+    ("darwin", 0, "ps: time: requires entitlement", True),
+    ("darwin", 1, "ps: time: requires entitlement", True),
+    ("darwin", 1, "ps: permission denied", False),
+    ("linux", 1, "ps: time: requires entitlement", False),
+])
+def test_process_snapshot_retries_only_the_macos_time_entitlement_error(
+    monkeypatch, platform, exit_code, diagnostic, retry,
+):
+    from harness import lane_watchdog
+
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command[0])
+        if command[0] == "ps":
+            return subprocess.CompletedProcess(command, exit_code, "", diagnostic)
+        assert kwargs["timeout"] == 7
+        return subprocess.CompletedProcess(
+            command, 0, "12 1 Wed Nov 25 17:00:00 2026 S 0:00.05\n", "",
+        )
+
+    monkeypatch.setattr(lane_watchdog.sys, "platform", platform)
+    monkeypatch.setattr(lane_watchdog.subprocess, "run", run)
+    clock = iter((100.0, 103.0))
+    monkeypatch.setattr(lane_watchdog, "time", SimpleNamespace(monotonic=clock.__next__))
+
+    snapshot = lane_watchdog.process_snapshot()
+    if retry:
+        assert commands == ["ps", "/bin/ps"]
+        assert snapshot is not None and snapshot[12]["cpu"] == "0:00.05"
+    else:
+        assert commands == ["ps"]
+        assert snapshot is None
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS system ps")
