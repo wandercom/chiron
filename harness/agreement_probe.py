@@ -24,7 +24,12 @@ from typing import Any
 
 from agreement_contract import WITNESS_SCHEMA
 
-from factory_runtime.host_git import (
+# Run directly (a kickoff Validator does), Python sees only harness/, not factory_runtime.
+_PACKAGE_ROOT = str(pathlib.Path(__file__).resolve().parent.parent)
+if _PACKAGE_ROOT not in sys.path:
+    sys.path.append(_PACKAGE_ROOT)
+
+from factory_runtime.host_git import (  # noqa: E402
     HostGitError,
     contained_file_target,
     materialize_commit,
