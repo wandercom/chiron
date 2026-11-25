@@ -128,6 +128,13 @@ jobs:
       - name: Install hosted lifecycle test transport
         run: command -v tmux >/dev/null || brew install tmux
 
+      - name: Verify macOS process observation with ps shadowed on PATH
+        run: |
+          python -m pytest tests/test_lane_watchdog.py \
+            tests/test_normal_workflow.py::test_start_has_only_assigned_residents_and_private_socket \
+            tests/test_coordinator_startup.py::test_startup_waits_for_each_seat_to_register \
+            tests/test_harness_scripts.py::test_startup_preflight_failure_preserves_task_and_allows_retry
+
       - name: Prove hosted kernel admission, attestation and lifecycle
         run: |
           python -m pytest tests/test_hosted_kernel_primitive.py \

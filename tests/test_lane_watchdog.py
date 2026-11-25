@@ -1,6 +1,84 @@
-"""Forcing tests for harness/lane_watchdog.py target addressing."""
+"""Regression tests for process observation and watchdog target addressing."""
 
 from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from types import SimpleNamespace
+
+import pytest
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_process_snapshot_keeps_a_working_path_ps(monkeypatch, platform):
+    from harness import lane_watchdog
+
+    def run(command, **kwargs):
+        assert command[0] == "ps"
+        return subprocess.CompletedProcess(
+            command, 0, "12 1 Wed Nov 25 17:00:00 2026 S 0:00.05\n", "",
+        )
+
+    monkeypatch.setattr(lane_watchdog.sys, "platform", platform)
+    monkeypatch.setattr(lane_watchdog.subprocess, "run", run)
+
+    assert lane_watchdog.process_snapshot() == {
+        12: {"pid": 12, "ppid": 1, "started": "Wed Nov 25 17:00:00 2026", "state": "S",
+             "cpu": "0:00.05"},
+    }
+
+
+@pytest.mark.parametrize(("platform", "exit_code", "diagnostic", "retry"), [
+    ("darwin", 0, "ps: time: requires entitlement", True),
+    ("darwin", 1, "ps: time: requires entitlement", True),
+    ("darwin", 1, "ps: permission denied", False),
+    ("linux", 1, "ps: time: requires entitlement", False),
+])
+def test_process_snapshot_retries_only_the_macos_time_entitlement_error(
+    monkeypatch, platform, exit_code, diagnostic, retry,
+):
+    from harness import lane_watchdog
+
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command[0])
+        if command[0] == "ps":
+            return subprocess.CompletedProcess(command, exit_code, "", diagnostic)
+        assert kwargs["timeout"] == 7
+        return subprocess.CompletedProcess(
+            command, 0, "12 1 Wed Nov 25 17:00:00 2026 S 0:00.05\n", "",
+        )
+
+    monkeypatch.setattr(lane_watchdog.sys, "platform", platform)
+    monkeypatch.setattr(lane_watchdog.subprocess, "run", run)
+    clock = iter((100.0, 103.0))
+    monkeypatch.setattr(lane_watchdog, "time", SimpleNamespace(monotonic=clock.__next__))
+
+    snapshot = lane_watchdog.process_snapshot()
+    if retry:
+        assert commands == ["ps", "/bin/ps"]
+        assert snapshot is not None and snapshot[12]["cpu"] == "0:00.05"
+    else:
+        assert commands == ["ps"]
+        assert snapshot is None
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS system ps")
+def test_snapshot_reads_live_process_with_shadowed_ps(tmp_path, monkeypatch):
+    from harness.lane_watchdog import process_snapshot
+
+    shadow_ps = tmp_path / "ps"
+    shadow_ps.write_text("#!/bin/sh\necho 'ps: time: requires entitlement' >&2\nexit 1\n")
+    shadow_ps.chmod(0o700)
+    monkeypatch.setenv("PATH", str(tmp_path), prepend=os.pathsep)
+
+    snapshot = process_snapshot()
+    assert snapshot is not None
+    row = snapshot[os.getpid()]
+    assert row["ppid"] == os.getppid()
+    assert row["started"] and row["cpu"]
 
 
 def test_window_id_never_lets_tmux_fall_back_to_another_window() -> None:

@@ -412,10 +412,21 @@ def _tmux(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 def process_snapshot() -> dict[int, dict[str, Any]] | None:
     """Read identities without command lines; failure is unknown, not an empty process table."""
+    arguments = ["-A", "-o", "pid=,ppid=,lstart=,stat=,time="]
+    env = {**os.environ, "LC_ALL": "C", "TZ": "UTC"}
+    timeout = 10.0
+    deadline = time.monotonic() + timeout
     try:
         result = subprocess.run(
-            ["ps", "-A", "-o", "pid=,ppid=,lstart=,stat=,time="], capture_output=True,
-            text=True, check=True, timeout=10, env={**os.environ, "LC_ALL": "C", "TZ": "UTC"})
+            ["ps", *arguments], capture_output=True, text=True, timeout=timeout, env=env)
+        # Some macOS builds report the missing time entitlement even when ps exits 0.
+        if sys.platform == "darwin" and "ps: time: requires entitlement" in (result.stderr or ""):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            result = subprocess.run(
+                ["/bin/ps", *arguments], capture_output=True, text=True, timeout=remaining, env=env)
+        result.check_returncode()
     except (OSError, subprocess.SubprocessError):
         return None
     rows: dict[int, dict[str, Any]] = {}
