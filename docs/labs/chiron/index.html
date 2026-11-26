@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chiron | Wander Labs</title>
+  <meta name="description" content="Chiron gives coding agents separate jobs and starts from a repository you already own. Review an exact change and the evidence for it.">
+  <link rel="canonical" href="https://labs.wander.com/chiron">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Chiron | Wander Labs">
+  <meta property="og:description" content="A software factory for changes you can verify.">
+  <meta property="og:url" content="https://labs.wander.com/chiron">
+  <link rel="stylesheet" href="./design/generated/tokens.css">
+  <link rel="stylesheet" href="./page.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <a class="brand" href="https://labs.wander.com/" aria-label="Wander Labs"><span aria-hidden="true"></span></a>
+  <main id="main">
+    <article>
+      <a class="back" href="https://labs.wander.com/">Wander Labs</a>
+      <header>
+        <h1>Chiron</h1>
+        <p class="lede">A software factory for changes you can verify.</p>
+        <p>Chiron, formerly Factory, takes a repository and a description of the behavior you need. One agent builds the change. Another writes tests from the requirements and public interfaces, without seeing the implementation. You get a candidate commit and the evidence for it: what was checked, what failed, and what remains uncertain.</p>
+        <nav class="actions" aria-label="Chiron resources">
+          <a href="https://github.com/wandercom/chiron">Repository</a>
+          <a href="#workflow">How it works</a>
+        </nav>
+      </header>
+
+      <section id="workflow" aria-labelledby="workflow-title">
+        <h2 id="workflow-title">Four roles, two independent authors</h2>
+        <p>The Coder and Tester work from different briefs. The Validator owns acceptance; the Orchestrator watches the work and flags drift.</p>
+        <dl class="roles">
+          <div><dt>Validator</dt><dd>Turns the request and repository constraints into separate briefs, then judges the result against the intended behavior.</dd></div>
+          <div><dt>Coder</dt><dd>Implements against the brief and public interfaces without seeing the Tester’s independent checks.</dd></div>
+          <div><dt>Tester</dt><dd>Writes checks from the behavior and interfaces without seeing the Coder’s implementation.</dd></div>
+          <div><dt>Orchestrator</dt><dd>Watches for drift, missing evidence, and work that goes past the brief.</dd></div>
+        </dl>
+      </section>
+
+      <section aria-labelledby="evidence-title">
+        <h2 id="evidence-title">Review the exact change</h2>
+        <p>Chiron records the starting commit and runs the project’s checks against an exact candidate. You can inspect which behavior was exercised, which checks passed, and where the evidence falls short. Passing checks inform the Validator’s decision; they don’t merge or deploy the code.</p>
+        <p>In an existing system, repository constraints and public contracts shape the work. A small, well-bounded change can move quickly. A change with wider consequences needs evidence that the surrounding behavior still holds.</p>
+      </section>
+
+      <section aria-labelledby="start-title">
+        <h2 id="start-title">Start with a behavior</h2>
+        <p>Describe what a caller or user should observe, then point Chiron at the repository. Choose the supported agent and model for each role, or use local defaults.</p>
+        <div class="command" role="region" aria-label="Example command" tabindex="0">
+          <pre><code>factory run example 'Describe the required behavior' --repo /path/to/repo</code></pre>
+        </div>
+        <p><a href="https://github.com/wandercom/chiron#install">Installation and workflow documentation</a></p>
+      </section>
+    </article>
+  </main>
+  <footer><a href="https://labs.wander.com/">Wander Labs</a></footer>
+</body>
+</html>
