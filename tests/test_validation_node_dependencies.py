@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from harness import run_record, validate_candidate
 
@@ -206,3 +209,88 @@ def test_corepack_cache_falls_back_to_xdg_then_home(tmp_path, monkeypatch):
     monkeypatch.setenv("COREPACK_HOME", str(explicit))
     code, _, output = _check(runs, repository, commit, 'printf %s "$COREPACK_HOME"')
     assert code == 0 and output == str(explicit)
+
+
+@pytest.fixture
+def pnpm_operator_home(tmp_path, monkeypatch):
+    home = tmp_path / "operator-home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(home / ".gitconfig"))
+    monkeypatch.setenv("COREPACK_HOME", str(home))
+    monkeypatch.delenv("PNPM_HOME", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    # Disable validate's System One HTTP probe via either key or profile loading.
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("JMC_JEV_API_KEY", raising=False)
+    monkeypatch.setenv("FACTORY_SYSTEM_ONE_PROFILE", "0")
+    return home
+
+
+def test_pnpm_home_preserves_the_operator_value(tmp_path, monkeypatch, pnpm_operator_home):
+    # PAY-2862 requires the exact nonempty value. Substituting a default fails here.
+    runs, repository, commit = _workspace(tmp_path)
+    expected = str(pnpm_operator_home / "custom pnpm home")
+    monkeypatch.setenv("PNPM_HOME", expected)
+    code, result, output = _check(runs, repository, commit, 'printf %s "${PNPM_HOME-<unset>}"')
+    assert code == 0, output
+    assert result["dependencies"]["status"] == "reused"
+    assert output == expected
+
+
+@pytest.mark.parametrize(
+    ("platform", "xdg_data", "pnpm_home", "expected"),
+    [
+        pytest.param("darwin", "xdg-data", None, "xdg-data/pnpm", id="macos-xdg"),
+        pytest.param("darwin", None, None, "operator-home/Library/pnpm", id="macos-home"),
+        pytest.param("linux", "xdg-data", None, "xdg-data/pnpm", id="linux-xdg"),
+        pytest.param("linux", None, None, "operator-home/.local/share/pnpm", id="linux-home"),
+        pytest.param("linux", None, "", "operator-home/.local/share/pnpm", id="empty-pnpm-home"),
+    ],
+)
+def test_pnpm_home_defaults_outside_the_target(
+    tmp_path, monkeypatch, pnpm_operator_home, platform, xdg_data, pnpm_home, expected,
+):
+    # The PAY-2862 review requires the default for empty or unset PNPM_HOME,
+    # with XDG taking precedence over the platform home. Using the check's
+    # isolated HOME would put pnpm's installation under the target.
+    _, repository, commit = _workspace(tmp_path)
+    (repository / ".git/info/exclude").write_text("/.factory/\n")
+    runs = repository / ".factory/runs"
+    run_record.create(runs, "task", repository, b"Check the workspace")
+    if xdg_data is not None:
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / xdg_data))
+    if pnpm_home is not None:
+        monkeypatch.setenv("PNPM_HOME", pnpm_home)
+    with monkeypatch.context() as operator:
+        operator.setattr(sys, "platform", platform)
+        code, result, output = _check(runs, repository, commit, 'printf %s "$PNPM_HOME"')
+    assert code == 0, output
+    assert result["dependencies"]["status"] == "reused"
+    assert output == str(tmp_path / expected)
+
+
+@pytest.mark.parametrize("status", ["not-reused", "not-node"])
+def test_pnpm_home_is_set_without_a_reused_install(
+    tmp_path, monkeypatch, pnpm_operator_home, status,
+):
+    # PAY-2862 applies the default to every dependency status. Setting the
+    # variable only during install reuse leaves these check commands unprotected.
+    if status == "not-reused":
+        runs, repository, _ = _workspace(tmp_path)
+        commit = _commit(repository, {"pnpm-lock.yaml": LOCK + "# new dependency\n"}, "lock")
+        (repository / "pnpm-lock.yaml").write_text(LOCK)
+    else:
+        repository = tmp_path / "source"
+        repository.mkdir()
+        subprocess.run(["git", "init", "-q", str(repository)], check=True)
+        commit = _commit(repository, {"package.json": "{}\n"}, "base")
+        runs = tmp_path / "runs"
+        run_record.create(runs, "task", repository, b"Check the workspace")
+    with monkeypatch.context() as operator:
+        operator.setattr(sys, "platform", "linux")
+        code, result, output = _check(runs, repository, commit, 'printf %s "$PNPM_HOME"')
+    assert code == 0, output
+    assert result["dependencies"]["status"] == status
+    assert output == str(pnpm_operator_home / ".local/share/pnpm")
