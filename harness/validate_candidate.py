@@ -305,6 +305,19 @@ def _ignored(path: Path) -> bool:
     return True
 
 
+def _default_pnpm_home() -> Path:
+    """Resolve pnpm's default from the operator's environment and home."""
+    data_home = os.environ.get("XDG_DATA_HOME")
+    if data_home:
+        return Path(data_home) / "pnpm"
+    if sys.platform == "darwin":
+        return Path.home() / "Library/pnpm"
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        return Path(local_app_data) / "pnpm" if local_app_data else Path.home() / ".pnpm"
+    return Path.home() / ".local/share/pnpm"
+
+
 def validate(
     runs: Path,
     run: str,
@@ -409,6 +422,10 @@ def validate(
         result["dependencies"] = {"status": "not-reused", "reason": str(error)}
     env = {name: os.environ[name] for name in ("PATH", "LANG", "TMPDIR") if name in os.environ}
     env.update(HOME=str(result_root), GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+    # The check's HOME is inside the target. A pnpm self-install there would re-read
+    # the workspace pin and recurse. Use the operator's pnpm home to reuse the pinned
+    # version and store from the source install.
+    env["PNPM_HOME"] = os.environ.get("PNPM_HOME") or str(_default_pnpm_home())
     if result["dependencies"].get("status") == "reused":
         # Check with the copied install: pnpm's pre-run install would refetch from the
         # repository's registries (no credentials here) and empty node_modules on failure.
